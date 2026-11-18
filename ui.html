@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>SVG-Export: Text als Pfade</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #18181a;
+      --muted: #6b6b73;
+      --accent: #0f9d8a;
+      --border: #d4d4da;
+      --error: #c0392b;
+    }
+    body.dark {
+      --bg: #18181a;
+      --fg: #f0f0f3;
+      --muted: #a0a0aa;
+      --accent: #7efff5;
+      --border: #3a3a40;
+      --error: #ff7b6b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      font: 14px/1.4 system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    h1 { font-size: 15px; margin: 0 0 12px; }
+    .sel {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 12px;
+      color: var(--muted);
+      max-height: 90px;
+      overflow: auto;
+    }
+    .sel strong { color: var(--fg); }
+    label {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      margin-bottom: 14px;
+      cursor: pointer;
+    }
+    label input { margin-top: 3px; accent-color: var(--accent); }
+    label small { display: block; color: var(--muted); }
+    button {
+      width: 100%;
+      padding: 10px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #000;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: default; }
+    #status { margin-top: 12px; color: var(--muted); min-height: 1.4em; }
+    #status.error { color: var(--error); }
+  </style>
+</head>
+<body>
+  <h1>SVG exportieren</h1>
+
+  <div class="sel" id="sel">Keine Auswahl</div>
+
+  <label>
+    <input type="checkbox" id="outline" checked />
+    <span>
+      Text in Pfade umwandeln
+      <small>Das Original bleibt unverändert und bearbeitbar.</small>
+    </span>
+  </label>
+
+  <button id="export" disabled>Als SVG exportieren</button>
+  <div id="status"></div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const applyTheme = (t) => document.body.classList.toggle("dark", t === "dark");
+    applyTheme(params.get("theme"));
+
+    const $ = (id) => document.getElementById(id);
+    const selEl = $("sel");
+    const btn = $("export");
+    const statusEl = $("status");
+
+    function setStatus(text, level) {
+      statusEl.textContent = text || "";
+      statusEl.className = level === "error" ? "error" : "";
+    }
+
+    function safeFileName(name) {
+      const cleaned = String(name || "export")
+        .replace(/[\\/:*?"<>|]+/g, "_")
+        .trim();
+      return (cleaned || "export") + ".svg";
+    }
+
+    function download(file) {
+      const blob = new Blob([file.bytes], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = safeFileName(file.name);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    btn.addEventListener("click", () => {
+      btn.disabled = true;
+      setStatus("Exportiere …");
+      parent.postMessage({ type: "export", outline: $("outline").checked }, "*");
+    });
+
+    window.addEventListener("message", (event) => {
+      const msg = event.data;
+      if (!msg || typeof msg !== "object") return;
+
+      if (msg.type === "theme") {
+        applyTheme(msg.theme);
+      } else if (msg.type === "selection") {
+        const items = msg.items || [];
+        btn.disabled = items.length === 0;
+        if (items.length === 0) {
+          selEl.textContent = "Keine Auswahl";
+        } else {
+          selEl.innerHTML = "";
+          const head = document.createElement("strong");
+          head.textContent = items.length === 1 ? "1 Ebene ausgewählt" : items.length + " Ebenen ausgewählt";
+          selEl.appendChild(head);
+          items.slice(0, 5).forEach((it) => {
+            const row = document.createElement("div");
+            row.textContent = it.name;
+            selEl.appendChild(row);
+          });
+          if (items.length > 5) {
+            const more = document.createElement("div");
+            more.textContent = "… und " + (items.length - 5) + " weitere";
+            selEl.appendChild(more);
+          }
+        }
+      } else if (msg.type === "status") {
+        setStatus(msg.text, msg.level);
+        if (msg.level === "error") btn.disabled = false;
+      } else if (msg.type === "result") {
+        msg.files.forEach(download);
+        const n = msg.files.length;
+        let text = n === 1 ? "1 SVG-Datei exportiert." : n + " SVG-Dateien exportiert.";
+        if (msg.outline) {
+          text += " " + msg.flattened + " Texte in Pfade umgewandelt.";
+          if (msg.remaining > 0) {
+            text += " Achtung: " + msg.remaining + " Texte konnten nicht umgewandelt werden.";
+          }
+        }
+        setStatus(text, msg.outline && msg.remaining > 0 ? "error" : "info");
+        btn.disabled = false;
+      }
+    });
+
+    parent.postMessage({ type: "ready" }, "*");
+  </script>
+</body>
+</html>
