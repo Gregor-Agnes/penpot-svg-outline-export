@@ -81,7 +81,7 @@
   </style>
 </head>
 <body>
-  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v4</small></h1>
+  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v5</small></h1>
 
   <div class="sel" id="sel">Keine Auswahl</div>
 
@@ -134,14 +134,20 @@
     // Öffnet einen normalen Tab, der den Download selbst auslöst. Normale Tabs sind
     // nicht so eingeschränkt wie das Plugin-Fenster.
     function saveViaTab(file) {
-      const svgUrl = URL.createObjectURL(new Blob([toBytes(file)], { type: "image/svg+xml" }));
+      // Der SVG-Text steckt direkt in der neuen Seite; den Blob erzeugt sie selbst.
+      // (Eine Blob-URL aus dem Plugin-Fenster ist im neuen Tab nicht abrufbar.)
+      const svgText = new TextDecoder().decode(toBytes(file));
       const name = safeFileName(file.name);
+      const js =
+        "const svg=" + JSON.stringify(svgText).replace(/</g, "\\u003c") + ";" +
+        "const a=document.getElementById('a');" +
+        "a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));" +
+        "a.download=" + JSON.stringify(name) + ";a.click();";
       const page =
         '<!doctype html><meta charset="utf-8"><title>Download</title>' +
         '<body style="font:14px system-ui;padding:24px"><p>Download startet …</p>' +
         '<a id="a">Falls nichts passiert: hier klicken</a>' +
-        "<script>const a=document.getElementById('a');a.href=" + JSON.stringify(svgUrl) +
-        ";a.download=" + JSON.stringify(name) + ";a.click();<\/script>";
+        "<script>" + js + "<\/script>";
       const pageUrl = URL.createObjectURL(new Blob([page], { type: "text/html" }));
       const win = window.open(pageUrl, "_blank");
       if (!win) setStatus("Der Browser hat das neue Fenster blockiert. Bitte Pop-ups erlauben.", "error");
