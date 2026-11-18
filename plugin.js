@@ -24,7 +24,43 @@ function sendStatus(text, level = "info") {
   penpot.ui.sendMessage({ type: "status", text, level });
 }
 
-penpot.on("selectionchange", sendSelection);
+// Automatischer Export: Sobald sich die Auswahl ändert (und kurz ruhig bleibt),
+// wird die Auswahl mit Text als Pfaden exportiert. Die Ergebnisse stehen dann im
+// Fenster bereit, damit Speichern/Öffnen/Kopieren direkt per Klick möglich sind.
+const DEBOUNCE_MS = 700;
+let timer = null;
+let busy = false;
+let pending = false;
+let rerunsLeft = 2;
+
+function selectionKey() {
+  return penpot.selection.map((s) => s.id).join(",");
+}
+
+let lastKey = "";
+
+function onSelectionChange() {
+  // Während des Exports entstehen temporäre Kopien; deren Ereignisse ignorieren.
+  if (busy) return;
+  sendSelection();
+  const key = selectionKey();
+  if (key === lastKey) return;
+  lastKey = key;
+  rerunsLeft = 2;
+  scheduleExport();
+}
+
+function scheduleExport() {
+  clearTimeout(timer);
+  if (penpot.selection.length === 0) {
+    penpot.ui.sendMessage({ type: "clear" });
+    return;
+  }
+  penpot.ui.sendMessage({ type: "preparing" });
+  timer = setTimeout(runExport, DEBOUNCE_MS);
+}
+
+penpot.on("selectionchange", onSelectionChange);
 penpot.on("themechange", (theme) => penpot.ui.sendMessage({ type: "theme", theme }));
 
 penpot.ui.onMessage(async (msg) => {
@@ -32,8 +68,8 @@ penpot.ui.onMessage(async (msg) => {
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "ready") {
       sendSelection();
-    } else if (msg.type === "export") {
-      await runExport(Boolean(msg.outline));
+      lastKey = selectionKey();
+      scheduleExport();
     }
   } catch (e) {
     reportError(e);
@@ -122,42 +158,62 @@ async function exportOutlined(shape) {
   }
 }
 
-async function runExport(outline) {
-  const selection = penpot.selection.slice();
-  if (selection.length === 0) {
-    sendStatus("Bitte zuerst ein Board oder eine Ebene auswählen.", "error");
+async function runExport() {
+  if (busy) {
+    pending = true;
     return;
   }
+  const selection = penpot.selection.slice();
+  if (selection.length === 0) return;
+  const key = selectionKey();
 
+  busy = true;
   const files = [];
   let flattenedTotal = 0;
   let remainingTotal = 0;
+  let ok = false;
 
   try {
     for (let i = 0; i < selection.length; i++) {
       const shape = selection[i];
-      sendStatus(`Exportiere ${i + 1} von ${selection.length}: ${shape.name} …`);
-
-      let bytes;
-      if (outline) {
-        const res = await exportOutlined(shape);
-        bytes = res.bytes;
-        flattenedTotal += res.flattened;
-        remainingTotal += res.remaining;
-      } else {
-        bytes = await shape.export({ type: "svg" });
-      }
-      files.push({ name: shape.name, data: bytesToBinary(bytes) });
+      sendStatus(`Bereite Export vor (${i + 1} von ${selection.length}): ${shape.name} …`);
+      const res = await exportOutlined(shape);
+      flattenedTotal += res.flattened;
+      remainingTotal += res.remaining;
+      files.push({ name: shape.name, data: bytesToBinary(res.bytes) });
     }
+    // Gleichnamige Ebenen bekommen eindeutige Dateinamen: Name, Name (2), Name (3) …
+    const seen = {};
+    files.forEach((f) => {
+      const n = (seen[f.name] = (seen[f.name] || 0) + 1);
+      if (n > 1) f.name = `${f.name} (${n})`;
+    });
+    ok = true;
+  } catch (e) {
+    reportError(e);
+  } finally {
+    busy = false;
+  }
 
+  const changed = selectionKey() !== key;
+  if (ok && !changed) {
     penpot.ui.sendMessage({
       type: "result",
       files,
-      outline,
       flattened: flattenedTotal,
       remaining: remainingTotal,
     });
-  } catch (e) {
-    reportError(e);
+  }
+
+  // Auswahl wurde während des Exports geändert (oder ein Lauf wartete): neu starten,
+  // aber höchstens ein paar Mal hintereinander, damit nichts endlos läuft.
+  if ((changed || pending) && rerunsLeft > 0) {
+    rerunsLeft--;
+    pending = false;
+    lastKey = selectionKey();
+    sendSelection();
+    scheduleExport();
+  } else {
+    pending = false;
   }
 }

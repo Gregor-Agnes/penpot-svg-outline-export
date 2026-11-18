@@ -78,22 +78,19 @@
       color: var(--fg);
       border: 1px solid var(--border);
     }
+    .file button.primary {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
-  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v5</small></h1>
+  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v6</small></h1>
 
   <div class="sel" id="sel">Keine Auswahl</div>
 
-  <label>
-    <input type="checkbox" id="outline" checked />
-    <span>
-      Text in Pfade umwandeln
-      <small>Das Original bleibt unverändert und bearbeitbar.</small>
-    </span>
-  </label>
-
-  <button id="export" disabled>Als SVG exportieren</button>
   <div id="status"></div>
   <div id="out"></div>
 
@@ -104,7 +101,6 @@
 
     const $ = (id) => document.getElementById(id);
     const selEl = $("sel");
-    const btn = $("export");
     const statusEl = $("status");
 
     function setStatus(text, level) {
@@ -180,39 +176,19 @@
         row.className = "row";
         const b0 = document.createElement("button");
         b0.textContent = "Als Datei speichern";
+        b0.className = "primary";
         b0.addEventListener("click", () => saveViaTab(file));
-        const b1 = document.createElement("button");
-        b1.textContent = "Herunterladen";
-        b1.addEventListener("click", () => download(file));
         const b2 = document.createElement("button");
         b2.textContent = "In neuem Tab öffnen";
         b2.addEventListener("click", () => openInTab(file));
         const b3 = document.createElement("button");
         b3.textContent = "Code kopieren";
         b3.addEventListener("click", () => copyCode(file));
-        row.append(b0, b1, b2, b3);
+        row.append(b0, b2, b3);
         box.append(name, row);
         out.appendChild(box);
       });
     }
-
-    function download(file) {
-      const blob = new Blob([toBytes(file)], { type: "image/svg+xml" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = safeFileName(file.name);
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }
-
-    btn.addEventListener("click", () => {
-      btn.disabled = true;
-      setStatus("Exportiere …");
-      parent.postMessage({ type: "export", outline: $("outline").checked }, "*");
-    });
 
     window.addEventListener("message", (event) => {
       const msg = event.data;
@@ -222,9 +198,10 @@
         applyTheme(msg.theme);
       } else if (msg.type === "selection") {
         const items = msg.items || [];
-        btn.disabled = items.length === 0;
         if (items.length === 0) {
           selEl.textContent = "Keine Auswahl";
+          $("out").innerHTML = "";
+          setStatus("Bitte ein Board oder eine Ebene auswählen.");
         } else {
           selEl.innerHTML = "";
           const head = document.createElement("strong");
@@ -241,28 +218,27 @@
             selEl.appendChild(more);
           }
         }
+      } else if (msg.type === "clear") {
+        $("out").innerHTML = "";
+      } else if (msg.type === "preparing") {
+        $("out").innerHTML = "";
+        setStatus("Bereite Export vor …");
       } else if (msg.type === "status") {
         setStatus(msg.text, msg.level);
-        if (msg.level === "error") btn.disabled = false;
       } else if (msg.type === "result") {
         try {
           renderFiles(msg.files);
-          msg.files.forEach(download);
         } catch (e) {
-          setStatus("Download fehlgeschlagen: " + (e && e.message ? e.message : e), "error");
-          btn.disabled = false;
+          setStatus("Fehler: " + (e && e.message ? e.message : e), "error");
           return;
         }
         const n = msg.files.length;
-        let text = n === 1 ? "1 SVG-Datei exportiert." : n + " SVG-Dateien exportiert.";
-        if (msg.outline) {
-          text += " " + msg.flattened + " Texte in Pfade umgewandelt.";
-          if (msg.remaining > 0) {
-            text += " Achtung: " + msg.remaining + " Texte konnten nicht umgewandelt werden.";
-          }
+        let text = n === 1 ? "SVG bereit." : n + " SVG-Dateien bereit.";
+        text += " " + msg.flattened + " Texte in Pfade umgewandelt.";
+        if (msg.remaining > 0) {
+          text += " Achtung: " + msg.remaining + " Texte konnten nicht umgewandelt werden.";
         }
-        setStatus(text, msg.outline && msg.remaining > 0 ? "error" : "info");
-        btn.disabled = false;
+        setStatus(text, msg.remaining > 0 ? "error" : "info");
       }
     });
 
