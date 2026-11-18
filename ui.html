@@ -70,7 +70,7 @@
       margin-bottom: 8px;
     }
     .file .name { font-weight: 600; word-break: break-all; }
-    .file .row { display: flex; gap: 6px; margin-top: 6px; }
+    .file .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
     .file button {
       padding: 6px 8px;
       font-size: 12px;
@@ -81,7 +81,7 @@
   </style>
 </head>
 <body>
-  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v3</small></h1>
+  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v4</small></h1>
 
   <div class="sel" id="sel">Keine Auswahl</div>
 
@@ -131,6 +131,22 @@
       if (!win) setStatus("Der Browser hat das neue Fenster blockiert. Bitte Pop-ups erlauben.", "error");
     }
 
+    // Öffnet einen normalen Tab, der den Download selbst auslöst. Normale Tabs sind
+    // nicht so eingeschränkt wie das Plugin-Fenster.
+    function saveViaTab(file) {
+      const svgUrl = URL.createObjectURL(new Blob([toBytes(file)], { type: "image/svg+xml" }));
+      const name = safeFileName(file.name);
+      const page =
+        '<!doctype html><meta charset="utf-8"><title>Download</title>' +
+        '<body style="font:14px system-ui;padding:24px"><p>Download startet …</p>' +
+        '<a id="a">Falls nichts passiert: hier klicken</a>' +
+        "<script>const a=document.getElementById('a');a.href=" + JSON.stringify(svgUrl) +
+        ";a.download=" + JSON.stringify(name) + ";a.click();<\/script>";
+      const pageUrl = URL.createObjectURL(new Blob([page], { type: "text/html" }));
+      const win = window.open(pageUrl, "_blank");
+      if (!win) setStatus("Der Browser hat das neue Fenster blockiert. Bitte Pop-ups erlauben.", "error");
+    }
+
     function copyCode(file) {
       const text = new TextDecoder().decode(toBytes(file));
       const ta = document.createElement("textarea");
@@ -156,6 +172,9 @@
         name.textContent = safeFileName(file.name) + " (" + Math.round(file.data.length / 1024) + " KB)";
         const row = document.createElement("div");
         row.className = "row";
+        const b0 = document.createElement("button");
+        b0.textContent = "Als Datei speichern";
+        b0.addEventListener("click", () => saveViaTab(file));
         const b1 = document.createElement("button");
         b1.textContent = "Herunterladen";
         b1.addEventListener("click", () => download(file));
@@ -165,7 +184,7 @@
         const b3 = document.createElement("button");
         b3.textContent = "Code kopieren";
         b3.addEventListener("click", () => copyCode(file));
-        row.append(b1, b2, b3);
+        row.append(b0, b1, b2, b3);
         box.append(name, row);
         out.appendChild(box);
       });
