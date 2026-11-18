@@ -87,7 +87,7 @@
   </style>
 </head>
 <body>
-  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v6</small></h1>
+  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v7</small></h1>
 
   <div class="sel" id="sel">Keine Auswahl</div>
 
@@ -129,21 +129,29 @@
 
     // Öffnet einen normalen Tab, der den Download selbst auslöst. Normale Tabs sind
     // nicht so eingeschränkt wie das Plugin-Fenster.
-    function saveViaTab(file) {
-      // Der SVG-Text steckt direkt in der neuen Seite; den Blob erzeugt sie selbst.
-      // (Eine Blob-URL aus dem Plugin-Fenster ist im neuen Tab nicht abrufbar.)
-      const svgText = new TextDecoder().decode(toBytes(file));
-      const name = safeFileName(file.name);
+    function saveViaTab(files) {
+      // Die SVG-Texte stecken direkt in der neuen Seite; sie erzeugt die Blobs selbst
+      // und löst die Downloads nacheinander aus. (Eine Blob-URL aus dem Plugin-Fenster
+      // ist im neuen Tab nicht abrufbar.)
+      const items = files.map((f) => ({
+        name: safeFileName(f.name),
+        svg: new TextDecoder().decode(toBytes(f)),
+      }));
       const js =
-        "const svg=" + JSON.stringify(svgText).replace(/</g, "\\u003c") + ";" +
-        "const a=document.getElementById('a');" +
-        "a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));" +
-        "a.download=" + JSON.stringify(name) + ";a.click();";
+        "const items=" + JSON.stringify(items).replace(/</g, "\\u003c") + ";" +
+        "const list=document.getElementById('list');const st=document.getElementById('st');" +
+        "const links=items.map(function(it){const a=document.createElement('a');" +
+        "a.href=URL.createObjectURL(new Blob([it.svg],{type:'image/svg+xml'}));" +
+        "a.download=it.name;a.textContent=it.name;a.style.display='block';" +
+        "list.appendChild(a);return a;});" +
+        "let i=0;function next(){if(i>=links.length){st.textContent=links.length===1?" +
+        "'Fertig. Falls keine Datei erschienen ist, auf den Namen klicken.':" +
+        "'Fertig: '+links.length+' Dateien. Fehlende bitte unten anklicken.';return;}" +
+        "links[i++].click();setTimeout(next,500);}next();";
       const page =
         '<!doctype html><meta charset="utf-8"><title>Download</title>' +
-        '<body style="font:14px system-ui;padding:24px"><p>Download startet …</p>' +
-        '<a id="a">Falls nichts passiert: hier klicken</a>' +
-        "<script>" + js + "<\/script>";
+        '<body style="font:14px system-ui;padding:24px"><p id="st">Download startet …</p>' +
+        '<div id="list"></div><script>' + js + "<\/script>";
       const pageUrl = URL.createObjectURL(new Blob([page], { type: "text/html" }));
       const win = window.open(pageUrl, "_blank");
       if (!win) setStatus("Der Browser hat das neue Fenster blockiert. Bitte Pop-ups erlauben.", "error");
@@ -166,6 +174,13 @@
     function renderFiles(files) {
       const out = $("out");
       out.innerHTML = "";
+      if (files.length > 1) {
+        const all = document.createElement("button");
+        all.textContent = "Alle " + files.length + " als Dateien speichern";
+        all.style.marginBottom = "8px";
+        all.addEventListener("click", () => saveViaTab(files));
+        out.appendChild(all);
+      }
       files.forEach((file) => {
         const box = document.createElement("div");
         box.className = "file";
@@ -177,7 +192,7 @@
         const b0 = document.createElement("button");
         b0.textContent = "Als Datei speichern";
         b0.className = "primary";
-        b0.addEventListener("click", () => saveViaTab(file));
+        b0.addEventListener("click", () => saveViaTab([file]));
         const b2 = document.createElement("button");
         b2.textContent = "In neuem Tab öffnen";
         b2.addEventListener("click", () => openInTab(file));
