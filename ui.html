@@ -62,10 +62,26 @@
     button:disabled { opacity: 0.5; cursor: default; }
     #status { margin-top: 12px; color: var(--muted); min-height: 1.4em; }
     #status.error { color: var(--error); }
+    #out { margin-top: 12px; }
+    .file {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
+    .file .name { font-weight: 600; word-break: break-all; }
+    .file .row { display: flex; gap: 6px; margin-top: 6px; }
+    .file button {
+      padding: 6px 8px;
+      font-size: 12px;
+      background: transparent;
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
   </style>
 </head>
 <body>
-  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v2</small></h1>
+  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v3</small></h1>
 
   <div class="sel" id="sel">Keine Auswahl</div>
 
@@ -79,6 +95,7 @@
 
   <button id="export" disabled>Als SVG exportieren</button>
   <div id="status"></div>
+  <div id="out"></div>
 
   <script>
     const params = new URLSearchParams(window.location.search);
@@ -102,9 +119,60 @@
       return (cleaned || "export") + ".svg";
     }
 
+    function toBytes(file) {
+      return Uint8Array.from(file.data, (c) => c.charCodeAt(0));
+    }
+
+    // Ausweichwege, falls der Browser Downloads aus dem Plugin-Fenster blockiert.
+    function openInTab(file) {
+      const blob = new Blob([toBytes(file)], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, "_blank");
+      if (!win) setStatus("Der Browser hat das neue Fenster blockiert. Bitte Pop-ups erlauben.", "error");
+    }
+
+    function copyCode(file) {
+      const text = new TextDecoder().decode(toBytes(file));
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      ta.remove();
+      setStatus(ok ? "SVG-Code kopiert. In einem Editor einfügen und als .svg speichern." : "Kopieren nicht möglich.", ok ? "info" : "error");
+    }
+
+    function renderFiles(files) {
+      const out = $("out");
+      out.innerHTML = "";
+      files.forEach((file) => {
+        const box = document.createElement("div");
+        box.className = "file";
+        const name = document.createElement("div");
+        name.className = "name";
+        name.textContent = safeFileName(file.name) + " (" + Math.round(file.data.length / 1024) + " KB)";
+        const row = document.createElement("div");
+        row.className = "row";
+        const b1 = document.createElement("button");
+        b1.textContent = "Herunterladen";
+        b1.addEventListener("click", () => download(file));
+        const b2 = document.createElement("button");
+        b2.textContent = "In neuem Tab öffnen";
+        b2.addEventListener("click", () => openInTab(file));
+        const b3 = document.createElement("button");
+        b3.textContent = "Code kopieren";
+        b3.addEventListener("click", () => copyCode(file));
+        row.append(b1, b2, b3);
+        box.append(name, row);
+        out.appendChild(box);
+      });
+    }
+
     function download(file) {
-      const bytes = Uint8Array.from(file.data, (c) => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: "image/svg+xml" });
+      const blob = new Blob([toBytes(file)], { type: "image/svg+xml" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -153,6 +221,7 @@
         if (msg.level === "error") btn.disabled = false;
       } else if (msg.type === "result") {
         try {
+          renderFiles(msg.files);
           msg.files.forEach(download);
         } catch (e) {
           setStatus("Download fehlgeschlagen: " + (e && e.message ? e.message : e), "error");

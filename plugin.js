@@ -8,8 +8,8 @@
 const UI_URL = "https://gregor-agnes.github.io/penpot-svg-outline-export/ui.html";
 
 penpot.ui.open("SVG-Export: Text als Pfade", `${UI_URL}?theme=${penpot.theme}`, {
-  width: 320,
-  height: 330,
+  width: 340,
+  height: 460,
 });
 
 function describeSelection() {
