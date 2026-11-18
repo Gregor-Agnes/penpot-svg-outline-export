@@ -26,13 +26,37 @@ penpot.on("selectionchange", sendSelection);
 penpot.on("themechange", (theme) => penpot.ui.sendMessage({ type: "theme", theme }));
 
 penpot.ui.onMessage(async (msg) => {
-  if (!msg || typeof msg !== "object") return;
-  if (msg.type === "ready") {
-    sendSelection();
-  } else if (msg.type === "export") {
-    await runExport(Boolean(msg.outline));
+  try {
+    if (!msg || typeof msg !== "object") return;
+    if (msg.type === "ready") {
+      sendSelection();
+    } else if (msg.type === "export") {
+      await runExport(Boolean(msg.outline));
+    }
+  } catch (e) {
+    reportError(e);
   }
 });
+
+function reportError(e) {
+  const text = e && e.message ? e.message : String(e);
+  try {
+    sendStatus("Fehler: " + text, "error");
+  } catch (_) {
+    // Fenster nicht erreichbar
+  }
+}
+
+// Bytes als Binär-String übertragen. Das ist robuster als Typed Arrays
+// über die Grenze zwischen Plugin-Sandbox und Fenster.
+function bytesToBinary(bytes) {
+  let out = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    out += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return out;
+}
 
 function collectTexts(root) {
   const texts = penpotUtils_findAll(root, (s) => s.type === "text");
@@ -121,18 +145,17 @@ async function runExport(outline) {
       } else {
         bytes = await shape.export({ type: "svg" });
       }
-      files.push({ name: shape.name, bytes });
+      files.push({ name: shape.name, data: bytesToBinary(bytes) });
     }
-  } catch (e) {
-    sendStatus(`Export fehlgeschlagen: ${e && e.message ? e.message : e}`, "error");
-    return;
-  }
 
-  penpot.ui.sendMessage({
-    type: "result",
-    files,
-    outline,
-    flattened: flattenedTotal,
-    remaining: remainingTotal,
-  });
+    penpot.ui.sendMessage({
+      type: "result",
+      files,
+      outline,
+      flattened: flattenedTotal,
+      remaining: remainingTotal,
+    });
+  } catch (e) {
+    reportError(e);
+  }
 }

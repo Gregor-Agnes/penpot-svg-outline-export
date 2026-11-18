@@ -65,7 +65,7 @@
   </style>
 </head>
 <body>
-  <h1>SVG exportieren</h1>
+  <h1>SVG exportieren <small style="font-weight:400;color:var(--muted)">v2</small></h1>
 
   <div class="sel" id="sel">Keine Auswahl</div>
 
@@ -103,7 +103,8 @@
     }
 
     function download(file) {
-      const blob = new Blob([file.bytes], { type: "image/svg+xml" });
+      const bytes = Uint8Array.from(file.data, (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "image/svg+xml" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -151,7 +152,13 @@
         setStatus(msg.text, msg.level);
         if (msg.level === "error") btn.disabled = false;
       } else if (msg.type === "result") {
-        msg.files.forEach(download);
+        try {
+          msg.files.forEach(download);
+        } catch (e) {
+          setStatus("Download fehlgeschlagen: " + (e && e.message ? e.message : e), "error");
+          btn.disabled = false;
+          return;
+        }
         const n = msg.files.length;
         let text = n === 1 ? "1 SVG-Datei exportiert." : n + " SVG-Dateien exportiert.";
         if (msg.outline) {
