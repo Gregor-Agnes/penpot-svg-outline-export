@@ -5,7 +5,9 @@
 //   3. alle Texte in der Kopie per penpot.flatten() in Pfade umwandeln
 //   4. Kopie als SVG exportieren und wieder löschen
 
-penpot.ui.open("SVG-Export: Text als Pfade", `./ui.html?theme=${penpot.theme}`, {
+const UI_URL = "https://gregor-agnes.github.io/penpot-svg-outline-export/ui.html";
+
+penpot.ui.open("SVG-Export: Text als Pfade", `${UI_URL}?theme=${penpot.theme}`, {
   width: 320,
   height: 330,
 });

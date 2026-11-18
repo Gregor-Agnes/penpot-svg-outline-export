@@ -1,6 +1,7 @@
 {
+  "version": 2,
   "name": "SVG-Export: Text als Pfade",
   "description": "Exportiert die Auswahl als SVG und wandelt dabei alle Texte in Vektorpfade um. Das Original bleibt unverändert.",
-  "code": "plugin.js",
+  "code": "https://gregor-agnes.github.io/penpot-svg-outline-export/plugin.js",
   "permissions": ["content:read", "content:write"]
 }
